@@ -1,0 +1,22 @@
+# Copy to deploy/secrets/msmtprc (git-ignored, mode 0444 so the forum's user can read it) and fill in.
+# The forum hands each mail to /usr/sbin/sendmail, which is msmtp here. The mount in the compose
+# file puts this file at /etc/msmtprc inside the container.
+#
+# The relay must accept mail for the address in FORUM_MAIL_FROM. Use TLS on port 587 (STARTTLS)
+# or 465 (implicit TLS); a plain-text relay is refused below.
+
+defaults
+auth           on
+tls            on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        off
+
+account        relay
+host           smtp.example.org
+port           587
+tls_starttls   on
+from           noreply@example.org
+user           noreply@example.org
+password       CHANGE-ME
+
+account default : relay

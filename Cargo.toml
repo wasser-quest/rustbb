@@ -1,0 +1,26 @@
+[package]
+name = "rustbb"
+description = "rustbb: a bulletin board in pure Rust. Server-rendered HTML, no JavaScript"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+publish = false
+
+[dependencies]
+argon2 = "0.5"
+axum = { version = "0.8", default-features = false, features = ["form", "http1", "multipart", "query", "tokio"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+hex = "0.4"
+object_store = { version = "0.14.2", default-features = false, features = ["aws"] }
+bytes = "1"
+maud = { version = "0.27", features = ["axum"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros", "chrono"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "time"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
