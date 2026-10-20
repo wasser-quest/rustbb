@@ -12,6 +12,7 @@ mod files;
 mod forms;
 mod help;
 mod mail;
+mod metadata;
 mod messages;
 mod models;
 mod net;
@@ -124,6 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/settings", get(profile::settings))
         .route("/settings/avatar", post(profile::set_avatar))
         .route("/settings/avatar/remove", post(profile::remove_avatar))
+        .route("/settings/delete", get(accounts::delete_form).post(accounts::delete))
         .route("/notifications", get(notify::notifications))
         .route("/notifications/read", post(notify::read_all))
         .route("/messages", get(messages::inbox))

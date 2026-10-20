@@ -252,7 +252,7 @@ pub fn settings(viewer: &Viewer, avatar_id: Option<&str>, error: Option<&str>) -
                 button.ghost type="submit" { "Remove picture" }
             }
         }
-        p.meta { a href=(format!("/users/{}", viewer.username)) { "Your profile" } }
+        p.meta { a href=(format!("/users/{}", viewer.username)) { "Your profile" } " · " a href="/settings/delete" { "Delete your account" } }
     }
 }
 

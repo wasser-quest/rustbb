@@ -21,7 +21,9 @@ async fn store_post_files(app: &AppState, user_id: i64, files: &[bytes::Bytes]) 
     let mut prepared = Vec::new();
     for bytes in files {
         let content_type = upload::check(bytes)?;
-        prepared.push((upload::new_id(), content_type, bytes.len(), bytes.clone()));
+        // Camera and location data go before anything is stored.
+        let cleaned = bytes::Bytes::from(crate::metadata::strip(bytes, content_type)?);
+        prepared.push((upload::new_id(), content_type, cleaned.len(), cleaned));
     }
     // The limits per user and for all files together come before anything is stored.
     if !prepared.is_empty() {

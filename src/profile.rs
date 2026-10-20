@@ -129,8 +129,12 @@ pub async fn set_avatar(State(app): State<AppState>, MaybeViewer(viewer): MaybeV
         Ok(content_type) => content_type,
         Err(error) => return Ok(settings_error(&app, Some(viewer), error).await?),
     };
+    let cleaned = match crate::metadata::strip(&bytes, content_type) {
+        Ok(cleaned) => bytes::Bytes::from(cleaned),
+        Err(error) => return Ok(settings_error(&app, Some(viewer), error).await?),
+    };
     let id = upload::new_id();
-    if app.storage.put(&id, bytes).await.is_err() {
+    if app.storage.put(&id, cleaned).await.is_err() {
         return Ok(settings_error(&app, Some(viewer), "The picture could not be stored. Try again later.").await?);
     }
     let old = current_avatar(&app, viewer.user_id).await?;

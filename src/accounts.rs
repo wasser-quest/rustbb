@@ -192,3 +192,78 @@ fn set_cookie(response: &mut Response, cookie: &str) {
         response.headers_mut().append(axum::http::header::SET_COOKIE, value);
     }
 }
+
+#[derive(Deserialize)]
+pub struct DeleteForm {
+    csrf: String,
+    password: String,
+}
+
+pub async fn delete_form(MaybeViewer(viewer): MaybeViewer) -> Result<Response, AppError> {
+    let Some(viewer) = viewer else {
+        return Ok(Redirect::to("/login").into_response());
+    };
+    Ok(views::page("Delete account", Some(&viewer), views_forms::delete_account(None, &viewer.csrf)).into_response())
+}
+
+/// Deletes the signed-in account after its password is checked. Its posts and threads stay for the
+/// others, under the name "[deleted]"; everything that identifies the member is removed.
+pub async fn delete(
+    State(app): State<AppState>,
+    MaybeViewer(viewer): MaybeViewer,
+    axum::Form(form): axum::Form<DeleteForm>,
+) -> Result<Response, AppError> {
+    let viewer = crate::threads::checked(viewer, &form.csrf)?;
+    let stored: Option<(String,)> = sqlx::query_as("SELECT password_hash FROM users WHERE id = $1")
+        .bind(viewer.user_id)
+        .fetch_optional(&app.pool)
+        .await?;
+    let Some((hash,)) = stored else {
+        return Err(AppError::NotFound);
+    };
+    if !auth::verify_password(&form.password, &hash) {
+        let page = views_forms::delete_account(Some("The password is wrong."), &viewer.csrf);
+        let page = views::page("Delete account", Some(&viewer), page);
+        return Ok((axum::http::StatusCode::UNPROCESSABLE_ENTITY, page).into_response());
+    }
+    let stored_files = erase_member(&app.pool, viewer.user_id).await?;
+    for id in stored_files {
+        let _ = app.storage.delete(&id).await;
+    }
+    let mut response = Redirect::to("/").into_response();
+    set_cookie(&mut response, &auth::cleared_cookie(app.secure_cookies));
+    Ok(response)
+}
+
+/// Removes the member's account and the data that identifies it, in one transaction. Returns the
+/// ids of the stored files (attachments and the picture) that must be deleted as well.
+async fn erase_member(pool: &sqlx::PgPool, user_id: i64) -> Result<Vec<String>, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    // The placeholder account that keeps the content. Its password hash is not a valid hash, so it
+    // cannot be signed into.
+    let (placeholder,): (i64,) = sqlx::query_as(
+        "INSERT INTO users (username, password_hash, email_confirmed_at) VALUES ('[deleted]', '!', now())
+         ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username RETURNING id",
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    let mut stored: Vec<(String,)> = sqlx::query_as("SELECT id FROM attachments WHERE user_id = $1")
+        .bind(user_id)
+        .fetch_all(&mut *tx)
+        .await?;
+    let picture: Option<(Option<String>,)> = sqlx::query_as("SELECT avatar_id FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM attachments WHERE user_id = $1").bind(user_id).execute(&mut *tx).await?;
+    sqlx::query("UPDATE posts SET user_id = $2 WHERE user_id = $1").bind(user_id).bind(placeholder).execute(&mut *tx).await?;
+    sqlx::query("UPDATE threads SET user_id = $2 WHERE user_id = $1").bind(user_id).bind(placeholder).execute(&mut *tx).await?;
+    sqlx::query("UPDATE messages SET user_id = $2 WHERE user_id = $1").bind(user_id).bind(placeholder).execute(&mut *tx).await?;
+    // Sessions, reactions, votes, follows, notifications, reports and memberships go with the row.
+    sqlx::query("DELETE FROM users WHERE id = $1").bind(user_id).execute(&mut *tx).await?;
+    tx.commit().await?;
+    if let Some((Some(id),)) = picture {
+        stored.push((id,));
+    }
+    Ok(stored.into_iter().map(|(id,)| id).collect())
+}

@@ -18,8 +18,9 @@ browser.
 - **Profiles** with a rank from the number of posts, an optional title and a picture.
 - **Moderation**: admins remove posts, ban members for a number of days or permanently, and set titles.
 - **Private messages**, off until an admin switches them on under *Site*.
-- **Accounts**: registration with an e-mail confirmation, password reset by e-mail, and an anti-bot
-  question. The first account ever made becomes the admin.
+- **Accounts**: registration with an e-mail confirmation, password reset by e-mail, an anti-bot
+  question, and account deletion (posts stay, shown as "[deleted]"). The first account ever made becomes the admin.
+- **Privacy**: metadata such as the location in a picture (EXIF) is removed on upload.
 - **Search engine friendly**: descriptive thread addresses, canonical links, `robots.txt`, a
   sitemap, and `noindex` on the private pages.
 

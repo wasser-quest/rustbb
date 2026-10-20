@@ -197,3 +197,20 @@ pub fn reports(rows: &[ReportRow], csrf: &str) -> Markup {
         }
     }
 }
+
+/// The account deletion: what is removed and what stays, and a password to confirm it.
+pub fn delete_account(error: Option<&str>, csrf: &str) -> Markup {
+    html! {
+        h1 { "Delete your account" }
+        p { "Your e-mail address, your password, your sessions, your picture, your attachments, your reactions, your votes and your memberships are deleted. This cannot be undone." }
+        p { "Your posts and threads stay, so that the replies of others still make sense. They are shown as written by " strong { "[deleted]" } "." }
+        @if let Some(error) = error { p.error role="alert" { (error) } }
+        form method="post" action="/settings/delete" {
+            input type="hidden" name="csrf" value=(csrf);
+            label { "Your password, to confirm" input type="password" name="password" autocomplete="current-password" required; }
+            button type="submit" { "Delete my account" }
+        }
+        p.meta { a href="/settings" { "Back to settings" } }
+    }
+}
+

@@ -219,6 +219,7 @@ def main():
 
     community(alice, bob, suffix)
     reactions_and_seo(alice, bob, suffix)
+    metadata_and_deletion(alice, suffix)
 
     print("\n%d check(s) failed" % len(failures) if failures else "\nall checks passed")
     return 1 if failures else 0
@@ -278,6 +279,52 @@ def reactions_and_seo(alice, bob, suffix):
     check("private pages send a noindex header", "noindex" in h.get("x-robots-tag", ""), h.get("x-robots-tag", ""))
     _, h, _ = anon.get(f"/threads/{thread_id}")
     check("public pages are not marked noindex", "x-robots-tag" not in h)
+
+
+def png_with_text(comment):
+    """A PNG with a text chunk that names a place, as a camera or an editor may add."""
+    base = png()
+    body = b"Comment\0" + comment.encode()
+    chunk = struct.pack(">I", len(body)) + b"tEXt" + body + b"\0\0\0\0"
+    end = base.rfind(b"IEND") - 4
+    return base[:end] + chunk + base[end:]
+
+
+def metadata_and_deletion(alice, suffix):
+    """Uploaded pictures lose their text metadata; a member can delete the account, and its posts stay
+    under [deleted]."""
+    _, _, form_page = alice.get("/boards/general/threads/new")
+    s, h, _ = alice.post("/boards/general/threads/new", {"csrf": field(form_page, "csrf") or "",
+                                                       "title": f"Metadata {suffix}", "body": "A picture with a place"},
+                         files=[("files", "place.png", "image/png", png_with_text("taken at secret place"))])
+    check("a picture with a text chunk is accepted", s == 303, str(s))
+    thread_id = re.search(r"/threads/(\d+)", h.get("location", "")).group(1) if s == 303 else "0"
+    _, _, page = alice.get(f"/threads/{thread_id}")
+    file_id = re.search(r'src="/files/([0-9a-f]{32})"', page)
+    if file_id:
+        _, _, data = alice.get(f"/files/{file_id.group(1)}")
+        check("the stored picture has no text metadata", "secret place" not in data and "tEXt" not in data)
+    else:
+        check("the stored picture has no text metadata", False, "no picture on the page")
+
+    dave, dave_name = Client(), f"dave_{suffix}"
+    register(dave, dave_name)
+    confirm_latest_link(dave, dave_name)
+    dave.post_form("/login", {"username": dave_name, "password": "correct-horse-9"})
+    _, _, form_page = dave.get("/boards/general/threads/new")
+    dave.post("/boards/general/threads/new", {"csrf": field(form_page, "csrf") or "",
+                                             "title": f"Deleted member {suffix}", "body": "Still here after the account is gone"})
+    _, _, form = dave.get("/settings/delete")
+    s, _, _ = dave.post_form("/settings/delete", {"csrf": field(form, "csrf") or "", "password": "wrong-password-1"})
+    check("the deletion asks for the password again", s == 422, str(s))
+    s, h, _ = dave.post_form("/settings/delete", {"csrf": field(form, "csrf") or "", "password": "correct-horse-9"})
+    check("the account is deleted with its password", s == 303, str(s))
+    s, _, _ = log_in(dave, dave_name)
+    check("a deleted account cannot log in", s == 401, str(s))
+    _, _, search = alice.get("/search?q=" + urllib.parse.quote(f"Deleted member {suffix}"))
+    check("the thread stays, under [deleted]", f"Deleted member {suffix}" in search)
+    s, _, _ = alice.get(f"/users/{dave_name}")
+    check("the profile is gone", s == 404, str(s))
 
 
 def community(alice, bob, suffix):
