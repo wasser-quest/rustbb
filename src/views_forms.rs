@@ -101,6 +101,15 @@ pub fn register(error: Option<&str>, username: &str, email: &str, challenge: &Ch
     }
 }
 
+/// Shown instead of the sign-up form while an admin has closed registration.
+pub fn registration_closed() -> Markup {
+    html! {
+        h1 { "Registration is closed" }
+        p { "New accounts are not being made at the moment." }
+        p.meta { a href="/login" { "Log in" } " if you already have an account." }
+    }
+}
+
 /// Shown after registering: the account works once the link in the mail has been opened.
 pub fn check_mail(email: &str) -> Markup {
     html! {

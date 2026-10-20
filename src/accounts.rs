@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use crate::auth::{self, MaybeViewer};
 use crate::error::AppError;
-use crate::{captcha, confirm, net, validate, views, views_forms, AppState};
+use crate::{admin, captcha, confirm, net, validate, views, views_forms, AppState};
 
 #[derive(Deserialize)]
 pub struct RegisterForm {
@@ -22,9 +22,12 @@ pub struct RegisterForm {
     captcha_answer: String,
 }
 
-pub async fn register_form(State(app): State<AppState>, MaybeViewer(viewer): MaybeViewer) -> Result<Markup, AppError> {
+pub async fn register_form(State(app): State<AppState>, MaybeViewer(viewer): MaybeViewer) -> Result<Response, AppError> {
+    if !admin::registration_open(&app).await? {
+        return Ok(views::page("Register", viewer.as_ref(), views_forms::registration_closed()).into_response());
+    }
     let challenge = captcha::issue(&app.pool).await?;
-    Ok(views::page("Register", viewer.as_ref(), views_forms::register(None, "", "", &challenge)))
+    Ok(views::page("Register", viewer.as_ref(), views_forms::register(None, "", "", &challenge)).into_response())
 }
 
 pub async fn register(
@@ -34,6 +37,10 @@ pub async fn register(
     MaybeViewer(_viewer): MaybeViewer,
     axum::Form(form): axum::Form<RegisterForm>,
 ) -> Result<Response, AppError> {
+    if !admin::registration_open(&app).await? {
+        let page = views::page("Register", None, views_forms::registration_closed());
+        return Ok((axum::http::StatusCode::FORBIDDEN, page).into_response());
+    }
     let ip = net::client_ip(&headers, peer, app.trust_proxy);
     if !app.limiter.allow(&format!("register:{ip}"), 5, Duration::from_secs(3600)) {
         return error_page(&app, "Too many sign-ups from this address. Try again later.", &form.username, &form.email).await;

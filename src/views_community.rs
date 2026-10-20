@@ -256,11 +256,16 @@ pub fn settings(viewer: &Viewer, avatar_id: Option<&str>, error: Option<&str>) -
     }
 }
 
-pub fn admin_settings(viewer: &Viewer, messages: bool) -> Markup {
+pub fn admin_settings(viewer: &Viewer, messages: bool, registration: bool) -> Markup {
     html! {
         h1 { "Site settings" }
         form method="post" action="/admin/settings" {
             input type="hidden" name="csrf" value=(viewer.csrf);
+            label.check {
+                input type="checkbox" name="registration" value="on" checked?[registration];
+                "New accounts may register"
+            }
+            p.meta { "While this is off, the register page says that registration is closed. Members with an account can still log in." }
             label.check {
                 input type="checkbox" name="private_messages" value="on" checked?[messages];
                 "Private messages between members (off by default)"

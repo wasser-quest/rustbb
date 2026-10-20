@@ -152,7 +152,8 @@ async fn find_member(app: &AppState, username: &str) -> Result<(i64, bool), AppE
 pub async fn settings(State(app): State<AppState>, MaybeViewer(viewer): MaybeViewer) -> Result<Markup, AppError> {
     let viewer = require_admin(&app, viewer).await?;
     let messages = messages_switched_on(&app).await?;
-    Ok(views::page("Site settings", Some(&viewer), views_community::admin_settings(&viewer, messages)))
+    let registration = registration_open(&app).await?;
+    Ok(views::page("Site settings", Some(&viewer), views_community::admin_settings(&viewer, messages, registration)))
 }
 
 #[derive(Deserialize)]
@@ -160,6 +161,8 @@ pub struct SettingsForm {
     csrf: String,
     /// Present (as `on`) when the box is ticked.
     private_messages: Option<String>,
+    /// Present (as `on`) while new accounts may register.
+    registration: Option<String>,
 }
 
 pub async fn save_settings(
@@ -169,15 +172,27 @@ pub async fn save_settings(
 ) -> Result<Response, AppError> {
     let viewer = checked(viewer, &form.csrf)?;
     require_admin(&app, Some(viewer)).await?;
-    let value = if form.private_messages.as_deref() == Some("on") { "on" } else { "off" };
-    sqlx::query(
-        "INSERT INTO settings (key, value) VALUES ('private_messages', $1)
-         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
-    )
-    .bind(value)
-    .execute(&app.pool)
-    .await?;
+    let messages = if form.private_messages.as_deref() == Some("on") { "on" } else { "off" };
+    let registration = if form.registration.as_deref() == Some("on") { "on" } else { "off" };
+    for (key, value) in [("private_messages", messages), ("registration", registration)] {
+        sqlx::query(
+            "INSERT INTO settings (key, value) VALUES ($1, $2)
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+        )
+        .bind(key)
+        .bind(value)
+        .execute(&app.pool)
+        .await?;
+    }
     Ok(Redirect::to("/admin/settings").into_response())
+}
+
+/// Whether new accounts may register. A missing setting counts as open; an admin closes it.
+pub async fn registration_open(app: &AppState) -> Result<bool, AppError> {
+    let row: Option<(String,)> = sqlx::query_as("SELECT value FROM settings WHERE key = 'registration'")
+        .fetch_optional(&app.pool)
+        .await?;
+    Ok(!matches!(row, Some((value,)) if value == "off"))
 }
 
 /// Whether private messages are switched on. A missing setting counts as off.
